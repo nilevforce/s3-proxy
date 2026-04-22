@@ -2,6 +2,7 @@ version: "3.9"
 
 services:
   s3-proxy:
+    container_name: s3-proxy
     build: .
     # Удалите ports или используйте expose,
     # чтобы сделать сервис доступным только внутри докера
