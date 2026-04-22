@@ -161,3 +161,12 @@ def presign_download(
         "url": url,
         "expires_in": expires_in
     }
+
+# ---------------- HEALTH CHECK ----------------
+
+@app.get("/health")
+def health_check():
+    return {
+        "success": True,
+        "status": "ok"
+    }
