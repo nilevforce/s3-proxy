@@ -157,41 +157,6 @@ curl -X GET "http://localhost:8000/files/cjld2cjxh0000qzrmn831i7rn.png/presign?e
 
 ---
 
-## ⬆️ Presigned Upload URL
-
-### `POST /files/presign-upload`
-
-Создаёт URL для прямой загрузки файла в S3.
-
-### Params
-
-* `key` (required)
-* `content_type` (optional, default: `application/octet-stream`)
-
----
-
-### Пример
-
-```bash
-curl -X POST "http://localhost:8000/files/presign-upload?key=test.png&content_type=image/png" \
-  -H "x-s3-access-key: ACCESS" \
-  -H "x-s3-secret-key: SECRET" \
-  -H "x-s3-endpoint: http://localhost:9000" \
-  -H "x-s3-bucket: my-bucket"
-```
-
----
-
-### Upload через presigned URL
-
-```bash
-curl -X PUT "PRESIGNED_URL" \
-  -H "Content-Type: image/png" \
-  --data-binary "@image.png"
-```
-
----
-
 ## ⚠️ Ошибки
 
 | Code | Meaning             |

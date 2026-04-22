@@ -161,33 +161,3 @@ def presign_download(
         "url": url,
         "expires_in": expires_in
     }
-
-# ---------------- PRESIGN UPLOAD ----------------
-
-@app.post("/files/presign-upload")
-def presign_upload(
-    key: str,
-    content_type: str = "application/octet-stream",
-    h=Depends(get_headers),
-):
-    client = get_s3_client(h["access"], h["secret"], h["endpoint"], h["region"])
-
-    try:
-        url = client.generate_presigned_url(
-            "put_object",
-            Params={
-                "Bucket": h["bucket"],
-                "Key": key,
-                "ContentType": content_type,
-            },
-            ExpiresIn=3600,
-        )
-    except ClientError as e:
-        handle_s3_error(e)
-
-    return {
-        "success": True,
-        "url": url,
-        "key": key,
-        "expires_in": 3600,
-    }
