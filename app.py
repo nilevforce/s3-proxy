@@ -2,12 +2,11 @@ from fastapi import FastAPI, UploadFile, File, Header, HTTPException, Depends, R
 from fastapi.responses import StreamingResponse, JSONResponse
 
 import boto3
-
 from botocore.exceptions import ClientError
 from cuid2 import cuid_wrapper
+import os
 
 app = FastAPI()
-
 create_cuid = cuid_wrapper()
 
 # ---------------- S3 CLIENT ----------------
@@ -20,7 +19,6 @@ def get_s3_client(access, secret, endpoint, region=None):
         endpoint_url=endpoint,
         region_name=region or "us-east-1",
     )
-
 
 # ---------------- HEADERS DEPENDENCY ----------------
 
@@ -38,7 +36,6 @@ def get_headers(
         "bucket": x_s3_bucket,
         "region": x_s3_region,
     }
-
 
 # ---------------- ERROR HANDLING ----------------
 
@@ -61,32 +58,33 @@ def handle_s3_error(e: ClientError):
 async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
-        content={
-            "error": "internal_error",
-            "detail": str(exc),
-        },
+        content={"error": "internal_error", "detail": str(exc)},
     )
-
 
 # ---------------- UPLOAD ----------------
 
 @app.post("/files/upload")
 async def upload_file(
     file: UploadFile = File(...),
-    key: str = None,
     h=Depends(get_headers),
 ):
-    client = get_s3_client(
-        h["access"], h["secret"], h["endpoint"], h["region"]
-    )
-
+    client = get_s3_client(h["access"], h["secret"], h["endpoint"], h["region"])
     bucket = h["bucket"]
 
     cuid = create_cuid()
-    key = key or f"uploads/{cuid}-{file.filename}"
+
+    ext = os.path.splitext(file.filename)[1]
+    key = f"{cuid}{ext}"
 
     try:
-        client.upload_fileobj(file.file, bucket, key)
+        client.upload_fileobj(
+            file.file,
+            bucket,
+            key,
+            ExtraArgs={
+                "ContentType": file.content_type or "application/octet-stream"
+            },
+        )
     except ClientError as e:
         handle_s3_error(e)
 
@@ -94,17 +92,14 @@ async def upload_file(
         "bucket": bucket,
         "key": key,
         "filename": file.filename,
+        "content_type": file.content_type,
     }
-
 
 # ---------------- DOWNLOAD (STREAM) ----------------
 
 @app.get("/files/{key}")
 def download_file(key: str, h=Depends(get_headers)):
-    client = get_s3_client(
-        h["access"], h["secret"], h["endpoint"], h["region"]
-    )
-
+    client = get_s3_client(h["access"], h["secret"], h["endpoint"], h["region"])
     bucket = h["bucket"]
 
     try:
@@ -112,21 +107,26 @@ def download_file(key: str, h=Depends(get_headers)):
     except ClientError as e:
         handle_s3_error(e)
 
+    content_type = obj.get("ContentType", "application/octet-stream")
+
     def stream():
         for chunk in obj["Body"].iter_chunks(1024 * 1024):
-            yield chunk
+            if chunk:
+                yield chunk
 
-    return StreamingResponse(stream())
-
+    return StreamingResponse(
+        stream(),
+        media_type=content_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{key}"'
+        },
+    )
 
 # ---------------- DELETE ----------------
 
 @app.delete("/files/{key}")
 def delete_file(key: str, h=Depends(get_headers)):
-    client = get_s3_client(
-        h["access"], h["secret"], h["endpoint"], h["region"]
-    )
-
+    client = get_s3_client(h["access"], h["secret"], h["endpoint"], h["region"])
     bucket = h["bucket"]
 
     try:
@@ -136,26 +136,26 @@ def delete_file(key: str, h=Depends(get_headers)):
 
     return {"deleted": True, "key": key}
 
-
 # ---------------- PRESIGN DOWNLOAD ----------------
 
 @app.get("/files/{key}/presign")
-def presign_download(key: str, h=Depends(get_headers)):
-    client = get_s3_client(
-        h["access"], h["secret"], h["endpoint"], h["region"]
-    )
+def presign_download(
+    key: str,
+    expires: int = 900,  # 15 минут по умолчанию
+    h=Depends(get_headers),
+):
+    client = get_s3_client(h["access"], h["secret"], h["endpoint"], h["region"])
 
     try:
         url = client.generate_presigned_url(
             "get_object",
             Params={"Bucket": h["bucket"], "Key": key},
-            ExpiresIn=3600,
+            ExpiresIn=expires,
         )
     except ClientError as e:
         handle_s3_error(e)
 
-    return {"url": url, "expires_in": 3600}
-
+    return {"url": url, "expires_in": expires}
 
 # ---------------- PRESIGN UPLOAD ----------------
 
@@ -165,9 +165,7 @@ def presign_upload(
     content_type: str = "application/octet-stream",
     h=Depends(get_headers),
 ):
-    client = get_s3_client(
-        h["access"], h["secret"], h["endpoint"], h["region"]
-    )
+    client = get_s3_client(h["access"], h["secret"], h["endpoint"], h["region"])
 
     try:
         url = client.generate_presigned_url(
