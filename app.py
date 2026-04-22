@@ -58,7 +58,7 @@ def handle_s3_error(e: ClientError):
 async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
-        content={"error": "internal_error", "detail": str(exc)},
+        content={"success": False, "error": "internal_error", "detail": str(exc)},
     )
 
 # ---------------- UPLOAD ----------------
@@ -72,7 +72,6 @@ async def upload_file(
     bucket = h["bucket"]
 
     cuid = create_cuid()
-
     ext = os.path.splitext(file.filename)[1]
     key = f"{cuid}{ext}"
 
@@ -89,10 +88,9 @@ async def upload_file(
         handle_s3_error(e)
 
     return {
+        "success": True,
         "bucket": bucket,
         "key": key,
-        "filename": file.filename,
-        "content_type": file.content_type,
     }
 
 # ---------------- DOWNLOAD (STREAM) ----------------
@@ -134,14 +132,17 @@ def delete_file(key: str, h=Depends(get_headers)):
     except ClientError as e:
         handle_s3_error(e)
 
-    return {"deleted": True, "key": key}
+    return {
+        "success": True,
+        "key": key
+    }
 
 # ---------------- PRESIGN DOWNLOAD ----------------
 
 @app.get("/files/{key}/presign")
 def presign_download(
     key: str,
-    expires: int = 900,  # 15 минут по умолчанию
+    expires_in: int = 900,
     h=Depends(get_headers),
 ):
     client = get_s3_client(h["access"], h["secret"], h["endpoint"], h["region"])
@@ -150,12 +151,16 @@ def presign_download(
         url = client.generate_presigned_url(
             "get_object",
             Params={"Bucket": h["bucket"], "Key": key},
-            ExpiresIn=expires,
+            ExpiresIn=expires_in,
         )
     except ClientError as e:
         handle_s3_error(e)
 
-    return {"url": url, "expires_in": expires}
+    return {
+        "success": True,
+        "url": url,
+        "expires_in": expires_in
+    }
 
 # ---------------- PRESIGN UPLOAD ----------------
 
@@ -181,6 +186,7 @@ def presign_upload(
         handle_s3_error(e)
 
     return {
+        "success": True,
         "url": url,
         "key": key,
         "expires_in": 3600,

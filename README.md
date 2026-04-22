@@ -67,10 +67,9 @@ curl -X POST "http://localhost:8000/files/upload" \
 
 ```json
 {
+  "success": true,
   "bucket": "my-bucket",
-  "key": "cjld2cjxh0000qzrmn831i7rn.png",
-  "filename": "image.png",
-  "content_type": "image/png"
+  "key": "cjld2cjxh0000qzrmn831i7rn.png"
 }
 ```
 
@@ -113,7 +112,7 @@ curl -X GET "http://localhost:8000/files/cjld2cjxh0000qzrmn831i7rn.png" \
 
 ```json
 {
-  "deleted": true,
+  "success": true,
   "key": "cjld2cjxh0000qzrmn831i7rn.png"
 }
 ```
@@ -128,16 +127,16 @@ curl -X GET "http://localhost:8000/files/cjld2cjxh0000qzrmn831i7rn.png" \
 
 ### Query параметры
 
-| Параметр | Тип | По умолчанию | Описание                                 |
-| -------- | --- | ------------ | ---------------------------------------- |
-| expires  | int | 900          | Время жизни ссылки в секундах (15 минут) |
+| Параметр   | Тип | По умолчанию | Описание                                 |
+| ---------- | --- | ------------ | ---------------------------------------- |
+| expires_in | int | 900          | Время жизни ссылки в секундах (15 минут) |
 
 ---
 
 ### Пример
 
 ```bash
-curl -X GET "http://localhost:8000/files/cjld2cjxh0000qzrmn831i7rn.png/presign?expires=3600" \
+curl -X GET "http://localhost:8000/files/cjld2cjxh0000qzrmn831i7rn.png/presign?expires_in=3600" \
   -H "x-s3-access-key: ACCESS" \
   -H "x-s3-secret-key: SECRET" \
   -H "x-s3-endpoint: http://localhost:9000" \
@@ -150,6 +149,7 @@ curl -X GET "http://localhost:8000/files/cjld2cjxh0000qzrmn831i7rn.png/presign?e
 
 ```json
 {
+  "success": true,
   "url": "https://s3...signed-url...",
   "expires_in": 3600
 }
