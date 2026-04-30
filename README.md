@@ -1,32 +1,31 @@
-# 📦 FastAPI S3 File Service
+# FastAPI S3 File Service
 
-Сервис предоставляет REST API для работы с файлами в S3-совместимом хранилище (AWS S3, MinIO, DigitalOcean Spaces и др.).
-
----
-
-## 🚀 Возможности
-
-* 📤 Загрузка файлов в S3 (с сохранением Content-Type)
-* 📥 Потоковое скачивание файлов (streaming)
-* 🗑️ Удаление файлов
-* 🔗 Presigned URL для скачивания (с настраиваемым временем жизни)
-* 🔐 Поддержка S3-compatible storage (MinIO и др.)
+REST API для работы с файлами в S3-совместимом хранилище (AWS S3, MinIO, DigitalOcean Spaces, Cloudflare R2 и др.).
 
 ---
 
-## 🧱 Архитектура
+## Возможности
 
-```
+- Загрузка файлов (приватная и публичная)
+- Потоковое скачивание файлов
+- Удаление файлов
+- Генерация presigned URL для скачивания
+
+---
+
+## Архитектура
+
+```text
 Client → FastAPI → boto3 → S3 Storage
 ```
 
-Backend выступает как прокси и генератор presigned URL.
+Backend выступает как proxy и генератор presigned URL.
 
 ---
 
-## 🔐 Авторизация (Headers)
+## Авторизация
 
-Каждый запрос требует S3 credentials:
+Каждый запрос требует S3 credentials через заголовки:
 
 | Header            | Описание                         |
 | ----------------- | -------------------------------- |
@@ -34,24 +33,28 @@ Backend выступает как прокси и генератор presigned U
 | `x-s3-secret-key` | Secret Key                       |
 | `x-s3-endpoint`   | S3 endpoint (AWS / MinIO / etc.) |
 | `x-s3-bucket`     | Bucket name                      |
-| `x-s3-region`     | (optional) region                |
+| `x-s3-region`     | Region (опционально)             |
 
 ---
 
-## 📤 Upload File
+## Эндпоинты
 
-### `POST /files/upload`
+### POST /files/upload
 
-Загружает файл в S3.
+Загружает файл в S3. При передаче параметра `?public=true` файл загружается с ACL `public-read` и возвращается публичный URL.
 
-### Request
+**Request**
 
-* `multipart/form-data`
-* `file` (required)
+- `multipart/form-data`
+- `file` — загружаемый файл (обязательно)
 
----
+**Query параметры**
 
-### Пример
+| Параметр | Тип  | По умолчанию | Описание                     |
+| -------- | ---- | ------------ | ---------------------------- |
+| `public` | bool | `false`      | Сделать файл публично доступным |
+
+**Пример — приватная загрузка**
 
 ```bash
 curl -X POST "http://localhost:8000/files/upload" \
@@ -62,7 +65,7 @@ curl -X POST "http://localhost:8000/files/upload" \
   -F "file=@image.png"
 ```
 
-### Response
+**Response**
 
 ```json
 {
@@ -72,23 +75,35 @@ curl -X POST "http://localhost:8000/files/upload" \
 }
 ```
 
+**Пример — публичная загрузка**
+
+```bash
+curl -X POST "http://localhost:8000/files/upload?public=true" \
+  -H "x-s3-access-key: ACCESS" \
+  -H "x-s3-secret-key: SECRET" \
+  -H "x-s3-endpoint: http://localhost:9000" \
+  -H "x-s3-bucket: my-bucket" \
+  -F "file=@image.png"
+```
+
+**Response**
+
+```json
+{
+  "success": true,
+  "bucket": "my-bucket",
+  "key": "cjld2cjxh0000qzrmn831i7rn.png",
+  "public_url": "http://localhost:9000/my-bucket/cjld2cjxh0000qzrmn831i7rn.png"
+}
+```
+
 ---
 
-## 📥 Download File (Streaming)
+### GET /files/{key}
 
-### `GET /files/{key}`
+Стримит файл напрямую из S3. Сохраняет оригинальный `Content-Type`, возвращает заголовок `Content-Disposition: attachment`.
 
-Стримит файл напрямую из S3.
-
-### Особенности
-
-* сохраняется `Content-Type`
-* добавляется `Content-Disposition: attachment`
-* браузер скачивает файл с корректным именем
-
----
-
-### Пример
+**Пример**
 
 ```bash
 curl -X GET "http://localhost:8000/files/cjld2cjxh0000qzrmn831i7rn.png" \
@@ -101,13 +116,11 @@ curl -X GET "http://localhost:8000/files/cjld2cjxh0000qzrmn831i7rn.png" \
 
 ---
 
-## 🗑️ Delete File
-
-### `DELETE /files/{key}`
+### DELETE /files/{key}
 
 Удаляет объект из S3.
 
-### Response
+**Response**
 
 ```json
 {
@@ -118,21 +131,17 @@ curl -X GET "http://localhost:8000/files/cjld2cjxh0000qzrmn831i7rn.png" \
 
 ---
 
-## 🔗 Presigned Download URL
+### GET /files/{key}/presign
 
-### `GET /files/{key}/presign`
+Генерирует временную ссылку для скачивания файла.
 
-Создаёт временную ссылку для скачивания.
+**Query параметры**
 
-### Query параметры
+| Параметр   | Тип | По умолчанию | Описание                      |
+| ---------- | --- | ------------ | ----------------------------- |
+| `expires_in` | int | `900`      | Время жизни ссылки в секундах |
 
-| Параметр   | Тип | По умолчанию | Описание                                 |
-| ---------- | --- | ------------ | ---------------------------------------- |
-| expires_in | int | 900          | Время жизни ссылки в секундах (15 минут) |
-
----
-
-### Пример
+**Пример**
 
 ```bash
 curl -X GET "http://localhost:8000/files/cjld2cjxh0000qzrmn831i7rn.png/presign?expires_in=3600" \
@@ -142,9 +151,7 @@ curl -X GET "http://localhost:8000/files/cjld2cjxh0000qzrmn831i7rn.png/presign?e
   -H "x-s3-bucket: my-bucket"
 ```
 
----
-
-### Response
+**Response**
 
 ```json
 {
@@ -156,11 +163,43 @@ curl -X GET "http://localhost:8000/files/cjld2cjxh0000qzrmn831i7rn.png/presign?e
 
 ---
 
-## ⚠️ Ошибки
+### GET /health
 
-| Code | Meaning             |
-| ---- | ------------------- |
-| 404  | File not found      |
-| 403  | Access denied       |
-| 401  | Invalid credentials |
-| 500  | Internal S3 error   |
+Проверка состояния сервиса.
+
+**Response**
+
+```json
+{
+  "success": true,
+  "status": "ok"
+}
+```
+
+---
+
+## Ошибки
+
+| Код | Описание               |
+| --- | ---------------------- |
+| 401 | Неверные credentials   |
+| 403 | Доступ запрещён        |
+| 404 | Файл не найден         |
+| 500 | Внутренняя ошибка S3   |
+
+---
+
+## Поддерживаемые провайдеры
+
+AWS S3, MinIO, DigitalOcean Spaces, Cloudflare R2, Wasabi, Backblaze B2 и любой S3-compatible провайдер.
+
+---
+
+## Установка и запуск
+
+```bash
+pip install -r requirements.txt
+python -m uvicorn app:app --host 0.0.0.0 --port 8000
+```
+
+По умолчанию сервис доступен по адресу `http://localhost:8000`.

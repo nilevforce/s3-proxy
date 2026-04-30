@@ -66,6 +66,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.post("/files/upload")
 async def upload_file(
     file: UploadFile = File(...),
+    public: bool = False,
     h=Depends(get_headers),
 ):
     client = get_s3_client(h["access"], h["secret"], h["endpoint"], h["region"])
@@ -75,23 +76,21 @@ async def upload_file(
     ext = os.path.splitext(file.filename)[1]
     key = f"{cuid}{ext}"
 
+    extra_args = {"ContentType": file.content_type or "application/octet-stream"}
+    if public:
+        extra_args["ACL"] = "public-read"
+
     try:
-        client.upload_fileobj(
-            file.file,
-            bucket,
-            key,
-            ExtraArgs={
-                "ContentType": file.content_type or "application/octet-stream"
-            },
-        )
+        client.upload_fileobj(file.file, bucket, key, ExtraArgs=extra_args)
     except ClientError as e:
         handle_s3_error(e)
 
-    return {
-        "success": True,
-        "bucket": bucket,
-        "key": key,
-    }
+    result = {"success": True, "bucket": bucket, "key": key}
+
+    if public:
+        result["public_url"] = f"{h['endpoint'].rstrip('/')}/{bucket}/{key}"
+
+    return result
 
 # ---------------- DOWNLOAD (STREAM) ----------------
 
